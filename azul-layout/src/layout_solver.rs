@@ -1730,8 +1730,23 @@ pub fn do_the_layout_internal(
             _ => None,
         }
     });
+
     for (node_id, word_positions) in word_positions_no_max_width.iter() {
-        content_widths_pre.as_ref_mut()[*node_id] = Some(word_positions.0.content_size.width);
+
+        // This sets the width that the text would like to have
+        //
+        // If the item is set to overflow: visible or overflow: hidden, the width
+        // will be the text width, no matter what (since the text can overflow anyway)
+
+        let can_overflow_parent_safely = ;
+        if can_overflow_parent_safely {
+            content_widths_pre.as_ref_mut()[*node_id] = Some(word_positions.0.content_size.width);
+        } else {
+            let parent_inner_width = ;
+            // Otherwise it will be the lesser one of the two
+            // (i.e. if the text overflows, it'll be the) parent width
+            content_widths_pre.as_ref_mut()[*node_id] = Some(word_positions.0.content_size.width.min(parent_width));
+        }
     }
 
     let mut width_calculated_arena = width_calculated_rect_arena_from_rect_layout_arena(
@@ -1754,10 +1769,13 @@ pub fn do_the_layout_internal(
         &all_parents_btreeset,
     );
 
+    println!("word_positions_no_max_width: {:#?}", word_positions_no_max_width.keys().collect::<Vec<_>>());
+
     // If the flex grow / max-width step has caused the text block
     // to shrink in width, it needs to recalculate its height
     let word_blocks_to_recalculate = word_positions_no_max_width.iter()
     .filter_map(|(node_id, word_positions)| {
+        println!("node id {}: total available width: {}, content size width: {}", node_id, width_calculated_arena.as_ref()[*node_id].total(), word_positions.0.content_size.width);
         if width_calculated_arena.as_ref()[*node_id].total() < word_positions.0.content_size.width {
             Some(*node_id)
         } else {
@@ -1767,6 +1785,7 @@ pub fn do_the_layout_internal(
     .collect::<BTreeSet<_>>();
 
     // Recalculate the height of the content blocks for the word blocks that need it
+    println!("recalculating: {:#?}", word_blocks_to_recalculate);
     create_word_positions(
         &mut word_positions_no_max_width,
         &word_blocks_to_recalculate,
@@ -2241,6 +2260,8 @@ fn create_word_positions<'a>(
     solved_widths: Option<&'a NodeDataContainerRef<'a, WidthCalculatedRect>>,
 ) {
 
+    println!("in function create_word_positions!");
+
     use rayon::prelude::*;
     use azul_text_layout::text_layout::position_words;
     use azul_core::app_resources::font_size_to_au;
@@ -2290,11 +2311,16 @@ fn create_word_positions<'a>(
             LayoutOverflow::Visible => true,
         };
 
+        println!("overflow_x: {:?}", overflow_x);
+        println!("text_can_overflow_parent: {:?}", text_can_overflow_parent);
+        println!("solved_widths: {:?}", solved_widths);
+
         let max_text_width = if !text_can_overflow_parent {
             solved_widths.map(|sw| sw[*node_id].total() as f32)
         } else {
             None
         };
+        println!("max_text_width: {:?}", max_text_width);
 
         let letter_spacing = css_property_cache
         .get_letter_spacing(node_data, node_id, &styled_node_state)
