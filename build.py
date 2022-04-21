@@ -599,19 +599,20 @@ def generate_rust_dll(api_data):
                     code += "pub use " + class_ptr_name + "TT as " + class_ptr_name + ";\r\n"
             else:
                 raise Exception("structs without 'external' key are not allowed! " + class_name)
+
             if "constructors" in c.keys():
                 for fn_name in c["constructors"]:
 
                     const = c["constructors"][fn_name]
 
                     fn_body = ""
+                    fn_args = fn_args_c_api(const, class_name, class_ptr_name, False, myapi_data)
+                    fn_args_call = rust_bindings_call_fn_args(const, class_name, class_ptr_name, False, myapi_data, class_is_boxed_object)
 
-                    if c_is_stack_allocated:
-                        fn_body += const["fn_body"]
+                    if "fn_body" in const.keys():
+                        fn_body = c["external"] + "::" + fn_name + "(" + fn_args_call +  ")"
                     else:
-                        fn_body += "let object: " + class_name + " = " + const["fn_body"] + "; " # note: security check, that the returned object is of the correct type
-                        fn_body += "let ptr = Box::into_raw(Box::new(object)) as *mut c_void; "
-                        fn_body += class_ptr_name + " { ptr }"
+                        raise Exception("constructors must have a function body: " + class_name + "::" + fn_name)
 
                     if "doc" in const.keys():
                         code += "/// " + const["doc"] + "\r\n"
@@ -632,9 +633,6 @@ def generate_rust_dll(api_data):
 
                             returns = analyzed_return_type[0] + prefix + return_type_class[1] + analyzed_return_type[2] # no postfix
 
-
-                    fn_args = fn_args_c_api(const, class_name, class_ptr_name, False, myapi_data)
-
                     rust_functions_map[str(class_ptr_name + "_" + snake_case_to_lower_camel(fn_name))] = [fn_args, returns];
                     code += "#[no_mangle] pub extern \"C\" fn " + class_ptr_name + "_" + snake_case_to_lower_camel(fn_name) + "(" + fn_args + ") -> " + returns + " { "
                     code += fn_body
@@ -645,14 +643,16 @@ def generate_rust_dll(api_data):
 
                     f = c["functions"][fn_name]
 
-                    fn_body = f["fn_body"]
+                    fn_args = fn_args_c_api(f, class_name, class_ptr_name, True, myapi_data)
+                    fn_args_call = rust_bindings_call_fn_args(f, class_name, class_ptr_name, True, myapi_data, class_is_boxed_object)
+                    fn_args_call = fn_args_call.replace("self", class_name.lower())
+                    fn_body = c["external"] + "::" + fn_name + "(" + fn_args_call +  ")"
 
                     if "doc" in f.keys():
                         code += "/// " + f["doc"] + "\r\n"
                     else:
                         code += "/// Equivalent to the Rust `" + class_name  + "::" + fn_name + "()` function.\r\n"
 
-                    fn_args = fn_args_c_api(f, class_name, class_ptr_name, True, myapi_data)
 
                     returns = ""
                     if "returns" in f.keys():
