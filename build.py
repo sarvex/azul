@@ -20,7 +20,7 @@ def remove_path(path):
     elif os.path.isdir(path):
         shutil.rmtree(path)  # remove dir and all contains
     else:
-        raise ValueError("file {} is not a file or dir.".format(path))
+        raise ValueError(f"file {path} is not a file or dir.")
 
 def zip_directory(output_filename, dir_name):
     shutil.make_archive(output_filename, 'zip', dir_name)
@@ -29,15 +29,13 @@ def copy_file(src, dest):
     shutil.copyfile(src, dest)
 
 def read_file(path):
-    text_file = open(path, 'r')
-    text_file_contents = text_file.read()
-    text_file.close()
+    with open(path, 'r') as text_file:
+        text_file_contents = text_file.read()
     return text_file_contents
 
 def read_api_file(path):
     api_file_contents = read_file(path)
-    apiData = json.loads(api_file_contents)
-    return apiData
+    return json.loads(api_file_contents)
 
 html_root = "https://azul.rs"
 root_folder = os.path.abspath(os.path.join(__file__, os.pardir))
@@ -48,17 +46,19 @@ basic_types = [ # note: "char" is not a primitive type! - use u32 instead
     "u32", "u64", "u8", "()", "usize", "c_void"
 ]
 
-license = read_file(root_folder + "/LICENSE")
+license = read_file(f"{root_folder}/LICENSE")
 
 rust_api_patches = {
-    tuple(['str']): read_file(root_folder + "/api/_patches/azul.rs/string.rs"),
-    tuple(['vec']): read_file(root_folder + "/api/_patches/azul.rs/vec.rs"),
-    tuple(['option']): read_file(root_folder + "/api/_patches/azul.rs/option.rs"),
-    tuple(['dom']): read_file(root_folder + "/api/_patches/azul.rs/dom.rs"),
-    tuple(['gl']): read_file(root_folder + "/api/_patches/azul.rs/gl.rs"),
-    tuple(['css']): read_file(root_folder + "/api/_patches/azul.rs/css.rs"),
-    tuple(['window']): read_file(root_folder + "/api/_patches/azul.rs/window.rs"),
-    tuple(['callbacks']): read_file(root_folder + "/api/_patches/azul.rs/callbacks.rs"),
+    ('str',): read_file(f"{root_folder}/api/_patches/azul.rs/string.rs"),
+    ('vec',): read_file(f"{root_folder}/api/_patches/azul.rs/vec.rs"),
+    ('option',): read_file(f"{root_folder}/api/_patches/azul.rs/option.rs"),
+    ('dom',): read_file(f"{root_folder}/api/_patches/azul.rs/dom.rs"),
+    ('gl',): read_file(f"{root_folder}/api/_patches/azul.rs/gl.rs"),
+    ('css',): read_file(f"{root_folder}/api/_patches/azul.rs/css.rs"),
+    ('window',): read_file(f"{root_folder}/api/_patches/azul.rs/window.rs"),
+    ('callbacks',): read_file(
+        f"{root_folder}/api/_patches/azul.rs/callbacks.rs"
+    ),
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ def strip_fn_arg_types(arg_list):
 
     for item in arg_list.split(","):
         part_b = item.split(":")[1]
-        arg_list1 += "_: " + part_b + ", "
+        arg_list1 += f"_: {part_b}, "
 
     if arg_list1 != "":
         arg_list1 = arg_list1[:-2]
@@ -86,9 +86,8 @@ def strip_fn_arg_types(arg_list):
     return arg_list1.strip()
 
 def write_file(string, path):
-    text_file = open(path, "w+", newline='')
-    text_file.write(string)
-    text_file.close()
+    with open(path, "w+", newline='') as text_file:
+        text_file.write(string)
 
 def is_primitive_arg(arg):
     return get_stripped_arg(arg) in basic_types
@@ -103,16 +102,17 @@ def get_stripped_arg(arg):
     return arg
 
 def search_imports_arg_type(c, search_type, arg_types_to_search):
-    if search_type in c.keys():
-        for fn_name in c[search_type]:
-            const = c[search_type][fn_name]
-            if "fn_args" in const.keys():
-                for arg_object in const["fn_args"]:
-                    arg_name = list(arg_object.keys())[0]
-                    if arg_name == "self":
-                        continue
-                    arg_type = arg_object[arg_name]
-                    arg_types_to_search.append(arg_type)
+    if search_type not in c.keys():
+        return
+    for fn_name in c[search_type]:
+        const = c[search_type][fn_name]
+        if "fn_args" in const.keys():
+            for arg_object in const["fn_args"]:
+                arg_name = list(arg_object.keys())[0]
+                if arg_name == "self":
+                    continue
+                arg_type = arg_object[arg_name]
+                arg_types_to_search.append(arg_type)
 
 def get_all_imports(apiData, module, module_name):
 
@@ -137,7 +137,7 @@ def get_all_imports(apiData, module, module_name):
         found_module = search_for_class_by_class_name(apiData, arg)
 
         if found_module is None:
-            raise Exception(arg + " not found!")
+            raise Exception(f"{arg} not found!")
 
         if found_module[0] in imports:
             imports[found_module[0]].add(found_module[1])
@@ -149,7 +149,7 @@ def get_all_imports(apiData, module, module_name):
 
     imports_str = ""
 
-    for module_name in imports.keys():
+    for module_name in imports:
         classes = list(imports[module_name])
         use_str = ""
         if len(classes) == 1:
@@ -158,15 +158,15 @@ def get_all_imports(apiData, module, module_name):
             use_str = "{"
             classes.sort()
             for c in classes:
-                use_str += c + ", "
+                use_str += f"{c}, "
             use_str = use_str[:-2]
             use_str += "}"
 
         imports_str += "    #[cfg(not(feature = \"link_static\"))]\r\n"
-        imports_str += "    use crate::" + module_name + "::" + use_str + ";\r\n"
+        imports_str += f"    use crate::{module_name}::{use_str}" + ";\r\n"
         for c in classes:
             imports_str += "    #[cfg(feature = \"link_static\")]\r\n"
-            imports_str += "    use azul::" + prefix + c + " as " + c + ";\r\n"
+            imports_str += f"    use azul::{prefix}{c} as {c}" + ";\r\n"
 
     return imports_str
 
@@ -176,15 +176,15 @@ def fn_args_c_api(f, class_name, class_ptr_name, self_as_first_arg, apiData):
     if self_as_first_arg:
         self_val = list(f["fn_args"][0].values())[0]
         if (self_val == "value"):
-            fn_args += class_name.lower() + ": " + class_ptr_name + ", "
+            fn_args += f"{class_name.lower()}: {class_ptr_name}, "
         elif (self_val == "mut value"):
-            fn_args += "mut " + class_name.lower() + ": " + class_ptr_name + ", "
+            fn_args += f"mut {class_name.lower()}: {class_ptr_name}, "
         elif (self_val == "refmut"):
-            fn_args += class_name.lower() + ": &mut " + class_ptr_name + ", "
+            fn_args += f"{class_name.lower()}: &mut {class_ptr_name}, "
         elif (self_val == "ref"):
-            fn_args += class_name.lower() + ": &" + class_ptr_name + ", "
+            fn_args += f"{class_name.lower()}: &{class_ptr_name}, "
         else:
-            raise Exception("wrong self value " + self_val + " " + class_name)
+            raise Exception(f"wrong self value {self_val} {class_name}")
 
     if "fn_args" in f.keys():
         for arg_object in f["fn_args"]:
@@ -198,14 +198,14 @@ def fn_args_c_api(f, class_name, class_ptr_name, self_as_first_arg, apiData):
             arg_type = analyzed_arg_type[1]
 
             if is_primitive_arg(arg_type):
-                fn_args += arg_name + ": " + ptr_type + arg_type + ", " # no pre, no postfix
+                fn_args += f"{arg_name}: {ptr_type}{arg_type}, "
             else:
                 arg_type_new = search_for_class_by_class_name(apiData, arg_type)
                 if arg_type_new is None:
-                    print("arg_type not found: " + str(arg_type))
-                    raise Exception("type not found: " + arg_type)
+                    print(f"arg_type not found: {str(arg_type)}")
+                    raise Exception(f"type not found: {arg_type}")
                 arg_type = arg_type_new[1]
-                fn_args += arg_name + ": " + ptr_type + prefix + arg_type + ", " # no postfix
+                fn_args += f"{arg_name}: {ptr_type}{prefix}{arg_type}, "
         fn_args = fn_args[:-2]
 
     return fn_args
@@ -216,15 +216,15 @@ def c_fn_args_c_api(f, class_name, class_ptr_name, self_as_first_arg):
     if self_as_first_arg:
         self_val = list(f["fn_args"][0].values())[0]
         if (self_val == "value"):
-            fn_args += "const " + class_ptr_name + " " + class_name.lower() + ", "
+            fn_args += f"const {class_ptr_name} {class_name.lower()}, "
         elif (self_val == "mut value"):
-            fn_args += "restrict " + class_ptr_name + ": " + class_name.lower() + ", "
+            fn_args += f"restrict {class_ptr_name}: {class_name.lower()}, "
         elif (self_val == "refmut"):
-            fn_args += class_ptr_name + "* restrict " + class_name.lower() + ", "
+            fn_args += f"{class_ptr_name}* restrict {class_name.lower()}, "
         elif (self_val == "ref"):
-            fn_args += "const " + class_ptr_name + "* " + class_name.lower() + ", "
+            fn_args += f"const {class_ptr_name}* {class_name.lower()}, "
         else:
-            raise Exception("wrong self value " + self_val)
+            raise Exception(f"wrong self value {self_val}")
 
     if "fn_args" in f.keys():
         for arg_object in f["fn_args"]:
@@ -239,11 +239,11 @@ def c_fn_args_c_api(f, class_name, class_ptr_name, self_as_first_arg):
 
             if is_primitive_arg(arg_type):
                 if ptr_type == "*const":
-                    fn_args += "const" + replace_primitive_ctype(arg_type) + "* " + arg_name + ", " # no pre, no postfix
+                    fn_args += f"const{replace_primitive_ctype(arg_type)}* {arg_name}, "
                 elif ptr_type == "*mut":
-                    fn_args += replace_primitive_ctype(arg_type) + "* restrict" + " " + arg_name + ", " # no pre, no postfix
+                    fn_args += f"{replace_primitive_ctype(arg_type)}* restrict {arg_name}, "
                 else:
-                    fn_args += replace_primitive_ctype(arg_type) + " " + arg_name + ", " # no pre, no postfix
+                    fn_args += f"{replace_primitive_ctype(arg_type)} {arg_name}, "
             else:
                 fn_args += prefix + replace_primitive_ctype(arg_type) + replace_primitive_ctype(ptr_type).strip() + " " + arg_name + ", " # no postfix
 
@@ -257,7 +257,7 @@ def analyze_type(arg):
     ends = ""
 
     if type(arg) is dict:
-        print("expected string, got dict: " + str(arg))
+        print(f"expected string, got dict: {str(arg)}")
 
     if arg.startswith("&mut"):
         starts = "&mut "
@@ -280,7 +280,7 @@ def analyze_type(arg):
         starts += "["
         arg_type_array = arg_type[1:].split(";")
         arg_type = arg_type_array[0]
-        ends += ";" + arg_type_array[1]
+        ends += f";{arg_type_array[1]}"
 
     return [starts, arg_type, ends]
 
@@ -294,19 +294,25 @@ def class_is_typedef(c):
     return "callback_typedef" in c.keys()
 
 def class_is_stack_allocated(c):
-    class_is_boxed_object = not("external" in c.keys() and ("struct_fields" in c.keys() or "enum_fields" in c.keys() or "callback_typedef" in c.keys() or "const" in c.keys()))
+    class_is_boxed_object = (
+        "external" not in c.keys()
+        or "struct_fields" not in c.keys()
+        and "enum_fields" not in c.keys()
+        and "callback_typedef" not in c.keys()
+        and "const" not in c.keys()
+    )
     return not(class_is_boxed_object)
 
 # Same as calling get_class(search_class_by_name())
 def quick_get_class(api_data, searched_class_name):
     field_type_class_path = search_for_class_by_class_name(api_data, searched_class_name)
     if field_type_class_path is None:
-        print("quick_get_class: could not find: " + searched_class_name)
-        raise "quick_get_class: could not find: " + searched_class_name
+        print(f"quick_get_class: could not find: {searched_class_name}")
+        raise f"quick_get_class: could not find: {searched_class_name}"
     found_c = get_class(api_data, field_type_class_path[0], field_type_class_path[1])
     if found_c is None:
-        print("quick_get_class: could not find: " + searched_class_name)
-        raise "quick_get_class: could not find: " + searched_class_name
+        print(f"quick_get_class: could not find: {searched_class_name}")
+        raise f"quick_get_class: could not find: {searched_class_name}"
     return found_c
 
 # Find the [module, classname] given a class_name, returns None if not found
@@ -317,7 +323,7 @@ def search_for_class_by_class_name(api_data, searched_class_name):
         for class_name in module["classes"].keys():
             c = module["classes"][class_name]
             class_name = class_name
-            if class_name == searched_class_name or class_name == searched_class_name:
+            if class_name == searched_class_name:
                 return [module_name, class_name]
 
     return None
@@ -329,7 +335,7 @@ def get_class(api_data, module_name, class_name):
 def is_stack_allocated_type(api_data, class_name):
     search_result = search_for_class_by_class_name(api_data, class_name)
     if search_result is None:
-        raise Exception("type not found " + class_name)
+        raise Exception(f"type not found {class_name}")
     c = get_class(api_data, search_result[0], search_result[1])
     return class_is_stack_allocated(c)
 
@@ -353,14 +359,14 @@ def rust_bindings_fn_args(f, class_name, class_ptr_name, self_as_first_arg, api_
 
     if self_as_first_arg:
         self_val = list(f["fn_args"][0].values())[0]
-        if (self_val == "value") or (self_val == "mut value"):
+        if self_val in ["value", "mut value"]:
             fn_args += "self, "
         elif (self_val == "refmut"):
             fn_args += "&mut self, "
         elif (self_val == "ref"):
             fn_args += "&self, "
         else:
-            raise Exception("wrong self value " + self_val)
+            raise Exception(f"wrong self value {self_val}")
 
     if "fn_args" in f.keys():
         for arg_object in f["fn_args"]:
@@ -375,17 +381,17 @@ def rust_bindings_fn_args(f, class_name, class_ptr_name, self_as_first_arg, api_
             arg_type = type_analyzed[1]
 
             if is_primitive_arg(arg_type):
-                fn_args += arg_name + ": " + start + arg_type + ", " # usize
+                fn_args += f"{arg_name}: {start}{arg_type}, "
             else:
                 arg_type_class_name = search_for_class_by_class_name(api_data, arg_type)
                 if arg_type_class_name is None:
-                    raise Exception("arg type " + arg_type + " not found!")
+                    raise Exception(f"arg type {arg_type} not found!")
                 arg_type_class = get_class(api_data, arg_type_class_name[0], arg_type_class_name[1])
 
-                if start == "*const " or start == "*mut ":
-                    fn_args += arg_name + ": " + start + prefix + arg_type_class_name[1] + ", "
+                if start in ["*const ", "*mut "]:
+                    fn_args += f"{arg_name}: {start}{prefix}{arg_type_class_name[1]}, "
                 else:
-                    fn_args += arg_name + ": " + start + arg_type_class_name[1] + ", "
+                    fn_args += f"{arg_name}: {start}{arg_type_class_name[1]}, "
 
         fn_args = fn_args[:-2]
 
@@ -403,15 +409,12 @@ def rust_bindings_call_fn_args(f, class_name, class_ptr_name, self_as_first_arg,
             arg_type = arg_object[arg_name].strip()
 
             if arg_name == "self":
-                if len(self_ext) > 0:
-                    if arg_type == "ref":
-                        fn_args += "&self" + self_ext + ", "
-                    elif arg_type == "refmut":
-                        fn_args += "&mut self" + self_ext + ", "
-                    else:
-                        fn_args += "self" + self_ext + ", "
+                if len(self_ext) > 0 and arg_type == "ref":
+                    fn_args += f"&self{self_ext}, "
+                elif len(self_ext) > 0 and arg_type == "refmut":
+                    fn_args += f"&mut self{self_ext}, "
                 else:
-                    fn_args += "self" + self_ext + ", "
+                    fn_args += f"self{self_ext}, "
                 continue
 
             starts = ""
@@ -420,26 +423,26 @@ def rust_bindings_call_fn_args(f, class_name, class_ptr_name, self_as_first_arg,
             arg_type = type_analyzed[1]
 
             if is_primitive_arg(arg_type):
-                fn_args += arg_name + ", "
+                fn_args += f"{arg_name}, "
             else:
                 arg_type = arg_type.strip()
                 arg_type_class = search_for_class_by_class_name(api_data, arg_type)
                 if arg_type_class is None:
-                    raise Exception("arg type " + arg_type + " not found!")
+                    raise Exception(f"arg type {arg_type} not found!")
                 arg_type_class = get_class(api_data, arg_type_class[0], arg_type_class[1])
 
-                if start == "*const " or start == "*mut ":
-                    if len(self_ext) > 0:
-                        fn_args += "unsafe { core::mem::transmute(" + arg_name + ") }, "
-                    else:
-                        fn_args += arg_name + self_ext + ", "
+                if start in ["*const ", "*mut "]:
+                    fn_args += (
+                        "unsafe { core::mem::transmute(" + arg_name + ") }, "
+                        if len(self_ext) > 0
+                        else arg_name + self_ext + ", "
+                    )
+                elif class_is_typedef(arg_type_class):
+                    fn_args += start + arg_name + self_ext + ", "
+                elif class_is_stack_allocated(arg_type_class):
+                    fn_args += start + arg_name + self_ext + ", " # .object
                 else:
-                    if class_is_typedef(arg_type_class):
-                        fn_args += start + arg_name + self_ext + ", "
-                    elif class_is_stack_allocated(arg_type_class):
-                        fn_args += start + arg_name + self_ext + ", " # .object
-                    else:
-                        fn_args += start + arg_name + self_ext + ", "
+                    fn_args += start + arg_name + self_ext + ", "
 
         fn_args = fn_args[:-2]
 

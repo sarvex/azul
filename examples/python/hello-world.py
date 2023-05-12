@@ -7,7 +7,7 @@ class DataModel:
 # model -> view
 def my_layout_func(data, info):
 
-    label = Dom.text("{}".format(data.counter))
+    label = Dom.text(f"{data.counter}")
     label.set_inline_style("font-size: 50px")
 
     button = Button("Update counter")
